@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PNG Converter + CIFV</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 40px;
+      padding: 20px;
+      background: #f0f0f0;
+    }
+    .tool {
+      flex: 1 1 400px;
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    canvas {
+      display: none;
+    }
+    #grid {
+      display: grid;
+      margin-top: 20px;
+      background: #ccc;
+      padding: 6px;
+      border-radius: 6px;
+      width: fit-content;
+    }
+    .pixel {
+      width: 20px;
+      height: 20px;
+    }
+    textarea, input, button {
+      font-family: monospace;
+      margin-top: 10px;
+      padding: 6px;
+      font-size: 14px;
+    }
+    #copyBtn {
+      background-color: #0078d4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #copyBtn:disabled {
+      background-color: #aaa;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- PNG to Scratch Format Converter -->
+  <div class="tool">
+    <h2>PNG to Scratch Format Converter</h2>
+    <label>Grid Size: <input type="number" id="gridSize" value="17" min="1" max="24"></label><br>
+    <input type="file" id="upload" accept="image/png">
+    <canvas id="canvas"></canvas>
+    <button id="copyBtn" disabled>Copy Format Text</button>
+  </div>
+
+  <!-- Custom Image Format Viewer -->
+  <div class="tool">
+    <h2>Custom Image Format Viewer</h2>
+    <textarea id="input" rows="2" placeholder="Paste your format string here..."></textarea>
+    <div id="grid"></div>
+  </div>
+
+  <script>
+const palette = {
+  // Red shades
+  "-": [255, 68, 68],
+  "_": [255, 146, 146],
+  "=": [255, 212, 212],
+  // Orange shades
+  "+": [255, 206, 72],
+  "*": [255, 223, 134],
+  "/": [255, 237, 188],
+  // Yellow shades
+  "`": [252, 255, 97],
+  "~": [254, 255, 185],
+  '"': [254, 255, 211],
+  // Green shades
+  ",": [77, 255, 74],
+  "<": [144, 255, 142],
+  ".": [203, 255, 202],
+  // Turquoise shades
+  ">": [64, 255, 226],
+  "?": [142, 255, 238],
+  "!": [191, 255, 245],
+  // Blue shades
+  ";": [75, 72, 255],
+  ":": [134, 132, 255],
+  "'": [179, 177, 255],
+  // Legacy CIFV colors
+  "1": [255, 0, 0],
+  "2": [255, 165, 0],
+  "3": [255, 255, 0],
+  "4": [0, 128, 0],
+  "5": [64, 224, 208],
+  "6": [0, 0, 255],
+  "7": [255, 20, 147],
+  "8": [255, 192, 203],
+  "9": [255, 255, 255],
+  "a": [220, 220, 220],
+  "b": [192, 192, 192],
+  "c": [153, 153, 153],
+  "d": [102, 102, 102],
+  "e": [0, 0, 0],
+  "f": [181, 79, 0],
+  "g": [121, 52, 0],
+  "h": [65, 28, 0],
+  "i": [25, 11, 0]
+};
+
+
+    function closestColor(r, g, b) {
+      const brightness = (r + g + b) / 3;
+      const warmBias = r >= g && g >= b;
+      const redDominant = r > 150 && r - g < 80 && g - b < 80;
+
+      // Ultra-wide skin tone override → pink
+      if (
+        brightness > 120 &&
+        redDominant &&
+        warmBias &&
+        r > 130 && g > 100 && b < 150
+      ) {
+        return "8"; // pink for skin tone
+      }
+
+      let closest = "e", minDist = Infinity;
+      for (let key in palette) {
+        const [pr, pg, pb] = palette[key];
+        const dist = Math.sqrt((r - pr)**2 + (g - pg)**2 + (b - pb)**2);
+        if (dist < minDist) {
+          minDist = dist;
+          closest = key;
+        }
+      }
+      return closest;
+    }
+
+    let convertedText = "";
+
+    document.getElementById('upload').addEventListener('change', function(e) {
+      const gridSize = parseInt(document.getElementById('gridSize').value);
+      const file = e.target.files[0];
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.getElementById('canvas');
+        canvas.width = gridSize;
+        canvas.height = gridSize;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, gridSize, gridSize);
+        ctx.drawImage(img, 0, 0, gridSize, gridSize);
+        const imageData = ctx.getImageData(0, 0, gridSize, gridSize).data;
+
+        convertedText = "";
+        for (let i = 0; i < imageData.length; i += 4) {
+          const r = imageData[i], g = imageData[i + 1], b = imageData[i + 2];
+          convertedText += closestColor(r, g, b);
+        }
+
+        document.getElementById('copyBtn').disabled = false;
+      };
+      img.src = URL.createObjectURL(file);
+    });
+
+    document.getElementById('copyBtn').addEventListener('click', function() {
+      navigator.clipboard.writeText(convertedText.toLowerCase()).then(() => {
+        this.textContent = "Copied!";
+        setTimeout(() => this.textContent = "Copy Format Text", 1500);
+      });
+    });
+
+    document.getElementById('input').addEventListener('input', renderGrid);
+    document.getElementById('gridSize').addEventListener('input', renderGrid);
+
+function renderGrid() {
+  const data = document.getElementById('input').value.trim().toLowerCase();
+  const gridSize = parseInt(document.getElementById('gridSize').value);
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+
+  grid.style.gridTemplateColumns = `repeat(${gridSize}, 20px)`;
+
+  for (let i = 0; i < gridSize * gridSize; i++) {
+    const char = data[i] || 'e'; // fallback to black if missing
+    const div = document.createElement('div');
+    div.className = 'pixel';
+    const rgb = palette[char] || [0, 0, 0];
+    div.style.backgroundColor = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+    grid.appendChild(div);
+  }
+}
+
+  </script>
+
+</body>
+</html>
