@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CIFV Tools</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 40px;
+      padding: 20px;
+      background: #f0f0f0;
+      position: relative;
+    }
+    .tool {
+      flex: 1 1 400px;
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    canvas {
+      display: none;
+    }
+    #grid {
+      display: grid;
+      margin-top: 20px;
+      background: #ccc;
+      padding: 6px;
+      border-radius: 6px;
+      width: fit-content;
+      position: relative;
+    }
+    .pixel {
+      width: 20px;
+      height: 20px;
+    }
+    textarea, input, button {
+      font-family: monospace;
+      margin-top: 10px;
+      padding: 6px;
+      font-size: 14px;
+    }
+    #copyBtn {
+      background-color: #0078d4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #copyBtn:disabled {
+      background-color: #aaa;
+      cursor: not-allowed;
+    }
+    .posLink {
+      color: #0078d4;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    #highlightBox {
+      position: absolute;
+      border: 2px solid magenta;
+      box-sizing: border-box;
+      z-index: 10;
+      pointer-events: none;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="tool">
+    <h2>PNG to Scratch Format Converter</h2>
+    <label>Grid Size: <input type="number" id="gridSize" value="17" min="1" max="24"></label><br>
+    <input type="file" id="upload" accept="image/png">
+    <canvas id="canvas"></canvas>
+    <button id="copyBtn" disabled>Copy Format Text</button>
+  </div>
+
+  <div class="tool">
+    <h2>Custom Image Format Viewer</h2>
+    <textarea id="input" rows="2" placeholder="Paste your format string here..."></textarea>
+    <div id="grid"></div>
+    <div id="highlightBox"></div>
+    <button id="exportViewerPNG">Export CIFV as PNG</button>
+    <canvas id="viewerCanvas"></canvas>
+  </div>
+
+  <div class="tool">
+    <h2>Color Usage Analyzer</h2>
+    <div id="usageStats"></div>
+  </div>
+
+  <div class="tool">
+    <h2>Repeating Pattern Scanner</h2>
+    <label>Block Size: <input type="number" id="blockSize" value="2" min="1" max="24"></label>
+    <div id="patternResults"></div>
+  </div>
+
+  <script>
+    const palette = {
+      "-": [255, 68, 68], "_": [255, 146, 146], "=": [255, 212, 212],
+      "+": [255, 206, 72], "*": [255, 223, 134], "/": [255, 237, 188],
+      "#": [252, 255, 97], "$": [254, 255, 185], '"': [254, 255, 211],
+      ",": [77, 255, 74], "<": [144, 255, 142], ".": [203, 255, 202],
+      ">": [64, 255, 226], "?": [142, 255, 238], "!": [191, 255, 245],
+      ";": [75, 72, 255], ":": [134, 132, 255], "'": [179, 177, 255],
+      "1": [255, 0, 0], "2": [255, 165, 0], "3": [255, 255, 0],
+      "4": [0, 128, 0], "5": [64, 224, 208], "6": [0, 0, 255],
+      "7": [255, 20, 147], "8": [255, 192, 203], "9": [255, 255, 255],
+      "a": [220, 220, 220], "b": [192, 192, 192], "c": [153, 153, 153],
+      "d": [102, 102, 102], "e": [0, 0, 0], "f": [181, 79, 0],
+      "g": [121, 52, 0], "h": [65, 28, 0], "i": [25, 11, 0]
+    };
+
+    let convertedText = "";
+
+    function closestColor(r, g, b) {
+      let closest = "e", minDist = Infinity;
+      for (let key in palette) {
+        const [pr, pg, pb] = palette[key];
+        const dist = Math.sqrt((r - pr)**2 + (g - pg)**2 + (b - pb)**2);
+        if (dist < minDist) {
+          minDist = dist;
+          closest = key;
+        }
+      }
+      return closest;
+    }
+
+    document.getElementById('upload').addEventListener('change', function(e) {
+      const gridSize = parseInt(document.getElementById('gridSize').value);
+      const file = e.target.files[0];
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.getElementById('canvas');
+        canvas.width = gridSize;
+        canvas.height = gridSize;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, gridSize, gridSize);
+        ctx.drawImage(img, 0, 0, gridSize, gridSize);
+        const imageData = ctx.getImageData(0, 0, gridSize, gridSize).data;
+
+        convertedText = "";
+        for (let i = 0; i < imageData.length; i += 4) {
+          const r = imageData[i], g = imageData[i + 1], b = imageData[i + 2];
+          convertedText += closestColor(r, g, b);
+        }
+
+        document.getElementById('copyBtn').disabled = false;
+      };
+      img.src = URL.createObjectURL(file);
+    });
+
+    document.getElementById('copyBtn').addEventListener('click', function() {
+      navigator.clipboard.writeText(convertedText.toLowerCase()).then(() => {
+        this.textContent = "Copied!";
+        setTimeout(() => this.textContent = "Copy Format Text", 1500);
+      });
+    });
+
+    document.getElementById('exportViewerPNG').addEventListener('click', () => {
+      const data = document.getElementById('input').value.trim().toLowerCase();
+      const gridSize = parseInt(document.getElementById('gridSize').value);
+      const canvas = document.getElementById('viewerCanvas');
+      const ctx = canvas.getContext('2d');
+      const pixelSize = 20;
+
+      canvas.width = gridSize * pixelSize;
+      canvas.height = gridSize * pixelSize;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (let i = 0; i < gridSize * gridSize; i++) {
+        const char = data[i] || 'e';
+        const rgb = palette[char] || [0, 0, 0];
+        const x = (i % gridSize) * pixelSize;
+        const y = Math.floor(i / gridSize) * pixelSize;
+        ctx.fillStyle = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+        ctx.fillRect(x, y, pixelSize, pixelSize);
+      }
+
+      const image = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = 'cifv_viewer.png';
+      link.href = image;
+      link.click();
+    });
+
+    function renderGrid() {
+      const data = document.getElementById('input').value.trim().toLowerCase();
+      const gridSize = parseInt(document.getElementById('gridSize').value);
+      const grid = document.getElementById('grid');
+      grid.innerHTML = '';
+      grid.style.gridTemplateColumns = `repeat(${gridSize}, 20px)`;
+
+      for (let i = 0; i < gridSize * gridSize; i++) {
+      const char = data[i] || 'e';
+      const div = document.createElement('div');
+      div.className = 'pixel';
+      const rgb = palette[char] || [0, 0, 0];
+      div.style.backgroundColor = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+      grid.appendChild(div);
+    }
+  }
+
+  function updateAnalyzer() {
+    const data = document.getElementById('input').value.trim().toLowerCase();
+    const usageStats = document.getElementById('usageStats');
+    usageStats.innerHTML = '';
+
+    const usage = {};
+    for (let char of data) {
+      usage[char] = (usage[char] || 0) + 1;
+    }
+
+    const sortedKeys = Object.keys(usage).sort((a, b) => usage[b] - usage[a]);
+
+    for (let key of sortedKeys) {
+      const count = usage[key];
+      const rgb = palette[key] || [0, 0, 0];
+
+      const bar = document.createElement('div');
+      bar.style.display = 'flex';
+      bar.style.alignItems = 'center';
+      bar.style.marginBottom = '6px';
+
+      const swatch = document.createElement('div');
+      swatch.style.width = '20px';
+      swatch.style.height = '20px';
+      swatch.style.backgroundColor = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+      swatch.style.border = '1px solid #000';
+      swatch.style.marginRight = '10px';
+
+      const label = document.createElement('div');
+      label.textContent = `${key} → ${count} uses`;
+      label.style.flex = '1';
+
+      bar.appendChild(swatch);
+      bar.appendChild(label);
+      usageStats.appendChild(bar);
+    }
+  }
+
+  function scanPatterns() {
+    const data = document.getElementById('input').value.trim().toLowerCase();
+    const gridSize = parseInt(document.getElementById('gridSize').value);
+    const blockSize = parseInt(document.getElementById('blockSize').value);
+    const results = document.getElementById('patternResults');
+    results.innerHTML = '';
+
+    if (data.length < gridSize * gridSize) return;
+
+    const blocks = {};
+    for (let y = 0; y <= gridSize - blockSize; y++) {
+      for (let x = 0; x <= gridSize - blockSize; x++) {
+        let block = '';
+        for (let dy = 0; dy < blockSize; dy++) {
+          for (let dx = 0; dx < blockSize; dx++) {
+            const i = (y + dy) * gridSize + (x + dx);
+            block += data[i] || 'e';
+          }
+        }
+        if (!blocks[block]) blocks[block] = [];
+        blocks[block].push(`(${x},${y})`);
+      }
+    }
+
+    const sorted = Object.entries(blocks).sort((a, b) => b[1].length - a[1].length);
+    for (let [block, positions] of sorted.slice(0, 5)) {
+      const div = document.createElement('div');
+      div.style.marginBottom = '10px';
+      div.innerHTML = `<strong>🧩 Block:</strong> ${block}<br><strong>Count:</strong> ${positions.length}<br><strong>Positions:</strong> ${positions.map(pos => {
+        const [x, y] = pos.match(/\d+/g);
+        return `<span class="posLink" data-x="${x}" data-y="${y}" data-block="${block}">(${x},${y})</span>`;
+      }).join(', ')}`;
+      results.appendChild(div);
+    }
+  }
+
+  document.getElementById('input').addEventListener('input', () => {
+    renderGrid();
+    updateAnalyzer();
+    scanPatterns();
+  });
+
+  document.getElementById('gridSize').addEventListener('input', () => {
+    renderGrid();
+    updateAnalyzer();
+    scanPatterns();
+  });
+
+  document.getElementById('blockSize').addEventListener('input', scanPatterns);
+
+  document.getElementById('patternResults').addEventListener('click', function(e) {
+    if (!e.target.classList.contains('posLink')) return;
+
+    const x = parseInt(e.target.dataset.x);
+    const y = parseInt(e.target.dataset.y);
+    const gridSize = parseInt(document.getElementById('gridSize').value);
+    const blockSize = parseInt(document.getElementById('blockSize').value);
+    const grid = document.getElementById('grid');
+    const pixels = grid.querySelectorAll('.pixel');
+    const highlightBox = document.getElementById('highlightBox');
+
+    pixels.forEach(p => p.style.outline = '');
+    highlightBox.style.display = 'none';
+
+    const pixelSize = 20;
+    const left = x * pixelSize + grid.offsetLeft + 6;
+    const top = y * pixelSize + grid.offsetTop + 6;
+    const width = blockSize * pixelSize;
+    const height = blockSize * pixelSize;
+
+    let rSum = 0, gSum = 0, bSum = 0;
+    for (let dy = 0; dy < blockSize; dy++) {
+      for (let dx = 0; dx < blockSize; dx++) {
+        const i = (y + dy) * gridSize + (x + dx);
+        const char = document.getElementById('input').value.trim().toLowerCase()[i] || 'e';
+        const [r, g, b] = palette[char] || [0, 0, 0];
+        rSum += r; gSum += g; bSum += b;
+      }
+    }
+    const total = blockSize * blockSize;
+    const avgR = Math.floor(rSum / total);
+    const avgG = Math.floor(gSum / total);
+    const avgB = Math.floor(bSum / total);
+    const invR = 255 - avgR;
+    const invG = 255 - avgG;
+    const invB = 255 - avgB;
+
+    highlightBox.style.left = `${left}px`;
+    highlightBox.style.top = `${top}px`;
+    highlightBox.style.width = `${width}px`;
+    highlightBox.style.height = `${height}px`;
+    highlightBox.style.borderColor = `rgb(${invR}, ${invG}, ${invB})`;
+    highlightBox.style.display = 'block';
+  });
+  </script>
+</body>
+</html>
